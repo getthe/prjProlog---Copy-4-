@@ -1,0 +1,489 @@
+main(iKibo, oNewPos, oResult) :-
+    turnFromKibo(iKibo, xTurn),
+    generateAnyGoodMove(xTurn, xPiece, xOldPos, oNewPos),
+    checkCheckMate(xTurn, oNewPos, oResult).
+
+turnFromKibo(emptyKibo, BLUE).
+
+turnFromKibo(kibo(iEarlierKibo, move(iLastTurn, iPiece, iFrom, iTo)), oTurn) :-
+    opponent(iLastTurn, oTurn).
+
+checkCheckMate(iTurn, iNewPos, WIN) :-
+    checkMate(iTurn, iNewPos, WIN),
+    !,
+    declareGameOver(iTurn, iNewPos, WIN).
+
+checkCheckMate(iTurn, iNewPos, CONTINUE).
+
+generateAnyGoodMove(iKind, oPiece, iFrom, oTo) :-
+    canEat(iKind, oPiece, iFrom, oTo),
+    not(exposesKing(iKind, oPiece, iFrom, oTo)),
+    applyMove(iKind, oPiece, iFrom, oTo).
+
+generateAnyGoodMove(iKind, oPiece, iFrom, oTo) :-
+    equalOrGreaterMove(iKind, oPiece, iFrom, oTo),
+    not(exposesKing(iKind, oPiece, iFrom, oTo)),
+    applyMove(iKind, oPiece, iFrom, oTo).
+
+generateAnyGoodMove(iKind, oPiece, iFrom, oTo) :-
+    takeCareBeingEaten(iKind, oPiece, iFrom, oTo),
+    not(exposesKing(iKind, oPiece, iFrom, oTo)),
+    applyMove(iKind, oPiece, iFrom, oTo).
+
+generateAnyGoodMove(iKind, oPiece, iFrom, oTo) :-
+    moveToPromising(iKind, oPiece, iFrom, oTo),
+    not(exposesKing(iKind, oPiece, iFrom, oTo)),
+    applyMove(iKind, oPiece, iFrom, oTo).
+
+generateAnyGoodMove(iKind, oPiece, iFrom, oTo) :-
+    safeFallbackMove(iKind, oPiece, iFrom, oTo),
+    not(exposesKing(iKind, oPiece, iFrom, oTo)),
+    applyMove(iKind, oPiece, iFrom, oTo).
+
+escapeSafetyRule(reject_escape_that_newly_exposes_higher_valued_piece).
+metaWhyRule(local_escape_must_not_create_greater_material_loss).
+
+canEat(iKind, iPiece, Pos1, Pos2) :-
+    bestCaptureMove(iKind, iPiece, Pos1, Pos2).
+
+bestCaptureMove(iKind, oPiece, iFrom, oTo) :-
+    canGo(iKind, oPiece, iFrom, oTo),
+    targetValue(iKind, oTo, xTargetPiece, xTargetVal),
+    highestValueCapture(iKind, xTargetVal).
+
+highestValueCapture(iKind, iTargetVal) :-
+    not(hasHigherValuedCapture(iKind, iTargetVal)).
+
+hasHigherValuedCapture(iKind, iTargetVal) :-
+    canGo(iKind, xOtherPiece, xOtherFrom, xOtherTo),
+    targetValue(iKind, xOtherTo, xOtherTarget, xOtherVal),
+    greaterOrEqual(xOtherVal, iTargetVal).
+
+equalOrGreaterMove(iKind, iPiece, Pos1, Pos2) :-
+    equalOrGreaterCaptureMove(iKind, iPiece, Pos1, Pos2).
+
+takeCareBeingEaten(iKind, oPiece, iFrom, oTo) :-
+    isThere(iKind, oPiece, xRow, xCol),
+    equal(iFrom, pos(xCol, xRow)),
+    opponent(iKind, oOppoKind),
+    canGo(oOppoKind, xOppoPiece, xOppoFrom, iFrom),
+    canGo(iKind, oPiece, iFrom, oTo),
+    not(canBeEaten(iKind, oPiece, iFrom, oTo)).
+
+canGoSafe(iKind, iPiece, Pos1, Pos2) :-
+    not(canBeEaten(iKind, iPiece, Pos1, Pos2)).
+
+canBeEaten(iKind, iPiece, Pos1, Pos2) :-
+    canGo(iKind, iPiece, Pos1, Pos2),
+    opponent(iKind, oOppoKind),
+    canGo(oOppoKind, xOppoPiece, xOppoFrom, Pos2).
+
+selfValue(iKind, iPiece, Pos1, oValue) :-
+    isThere(iKind, iPiece, Pos1:x, Pos1:y),
+    pieceValue(iPiece, oValue).
+
+targetValue(iKind, Pos2, oTargetPiece, oValue) :-
+    opponent(iKind, oOppoKind),
+    isThere(oOppoKind, oTargetPiece, Pos2:x, Pos2:y),
+    pieceValue(oTargetPiece, oValue).
+
+declareGameOver(iKind, iNewPos, WIN).
+
+betterPosition(iKind, iPiece, Pos1, Pos2) :-
+    situationCounts(iKind, xOldCanGo, xOldCanEat, xOldCanBeEaten),
+    canGo(iKind, iPiece, Pos1, Pos2),
+    situationCounts(iKind, xNewCanGo, xNewCanEat, xNewCanBeEaten),
+    betteringSituation(iKind, xOldCanGo, xOldCanEat, xOldCanBeEaten, xNewCanGo, xNewCanEat, xNewCanBeEaten).
+
+situationCounts(iKind, oCanGoCount, oCanEatCount, oCanBeEatenCount) :-
+    countCanGo(iKind, oCanGoCount),
+    countCanEat(iKind, oCanEatCount),
+    countCanBeEaten(iKind, oCanBeEatenCount).
+
+betteringSituation(iKind, iOldCanGo, iOldCanEat, iOldCanBeEaten, iNewCanGo, iNewCanEat, iNewCanBeEaten) :-
+    greaterOrEqual(iNewCanGo, iOldCanGo),
+    greaterOrEqual(iNewCanEat, iOldCanEat),
+    greaterOrEqual(iOldCanBeEaten, iNewCanBeEaten).
+
+isBlocking(iPiece, iBlockedPiece).
+isGuarding(iPiece, iGuardedPiece).
+isSupporting(iPiece, iSupportedPiece).
+isSteppingStone(iPiece, iForPiece).
+
+purposeDictionary(gain_more_capturing_opportunity).
+purposeDomain(gain_more_capturing_opportunity, tactical_positioning).
+purposeTimeHorizon(gain_more_capturing_opportunity, next_turn).
+purposeDesiredEffect(gain_more_capturing_opportunity, increase_capture_options).
+purposeSuccessMeasure(gain_more_capturing_opportunity, capture_opportunity_count).
+purposeRequiresEvidence(gain_more_capturing_opportunity, compare_environment_before_after).
+purposeWhyNode(gain_more_capturing_opportunity, gain_more_capturing_opportunity).
+
+whyTreeStatus(provisional).
+
+whyNode(win_game, ultimate_goal).
+whyNode(defeat_opponent_king, strategic_goal).
+whyNode(gain_material_advantage, strategic_goal).
+whyNode(preserve_own_force, strategic_goal).
+whyNode(improve_position, strategic_goal).
+whyNode(create_attack, tactical_purpose).
+whyNode(gain_more_capturing_opportunity, tactical_purpose).
+whyNode(protect_threatened_piece, tactical_purpose).
+whyNode(increase_mobility, positional_purpose).
+whyNode(control_important_area, positional_purpose).
+whyNode(capture_opportunity_count_increased, evidence).
+
+whyEdge(defeat_opponent_king, win_game, achieves).
+whyEdge(gain_material_advantage, win_game, contributes_to).
+whyEdge(preserve_own_force, win_game, contributes_to).
+whyEdge(improve_position, win_game, contributes_to).
+whyEdge(create_attack, defeat_opponent_king, contributes_to).
+whyEdge(gain_more_capturing_opportunity, gain_material_advantage, may_contribute_to).
+whyEdge(protect_threatened_piece, preserve_own_force, contributes_to).
+whyEdge(increase_mobility, improve_position, contributes_to).
+whyEdge(control_important_area, improve_position, contributes_to).
+whyEdge(capture_opportunity_count_increased, gain_more_capturing_opportunity, verifies).
+whyEdge(increase_mobility, gain_more_capturing_opportunity, may_enable).
+
+metaWhyRule(increased_mobility_may_create_capture_opportunity).
+
+captureOpportunityFromMobility(
+    iEnvBefore,
+    iEnvAfter,
+    iKind,
+    iPiece,
+    oTargetPiece,
+    oTargetPos
+) :-
+    newLegalDestination(
+        iEnvBefore,
+        iEnvAfter,
+        iKind,
+        iPiece,
+        xNewPiecePos
+    ),
+    prospectiveCaptureFromPosition(
+        iEnvAfter,
+        iKind,
+        iPiece,
+        xNewPiecePos,
+        oTargetPiece,
+        oTargetPos
+    ).
+
+purposePolarity(protect_threatened_piece, defensive).
+purposePolarity(preserve_own_force, defensive).
+purposePolarity(create_attack, offensive).
+purposePolarity(gain_more_capturing_opportunity, offensive).
+purposePolarity(prepare_chariot_interception, offensive).
+
+metaWhyRule(move_serving_defensive_and_offensive_purposes_is_better).
+
+moveServesPurposeDomain(iKibo, iMove, oDomain) :-
+    purposeClaim(iKibo, iMove, xPurpose),
+    purposePolarity(xPurpose, oDomain).
+
+dualPurposeMove(iKibo, iMove) :-
+    moveServesPurposeDomain(iKibo, iMove, defensive),
+    moveServesPurposeDomain(iKibo, iMove, offensive).
+
+moveQuality(iKibo, iMove, better, dual_defensive_offensive) :-
+    dualPurposeMove(iKibo, iMove).
+
+whyNode(dual_purpose_move, meta_purpose).
+whyNode(better_move, move_evaluation).
+whyEdge(dual_purpose_move, better_move, qualifies_as).
+whyEdge(better_move, win_game, contributes_to).
+
+how_to_win(capture_higher_valued_pieces).
+how_to_win(facilitate_more_mobility).
+how_to_win(prefer_multiple_beneficial_purposes).
+how_to_win(use_offensive_purpose).
+how_to_win(use_defensive_purpose).
+
+how_to_win_supports(capture_higher_valued_pieces, gain_material_advantage).
+how_to_win_supports(facilitate_more_mobility, improve_position).
+how_to_win_supports(prefer_multiple_beneficial_purposes, better_move).
+how_to_win_supports(use_offensive_purpose, defeat_opponent_king).
+how_to_win_supports(use_defensive_purpose, preserve_own_force).
+
+whyRelatedOrSame(iPurpose, iPurpose).
+
+whyRelatedOrSame(iLowerPurpose, oHigherPurpose) :-
+    whyAncestor(iLowerPurpose, oHigherPurpose).
+
+moveSupportsHowToWin(
+    iEnvBefore,
+    iKibo,
+    iMove,
+    capture_higher_valued_pieces
+) :-
+    capturedHigherValuedPiece(
+        iEnvBefore,
+        iMove,
+        xTargetPiece,
+        xTargetValue
+    ).
+
+moveSupportsHowToWin(
+    iEnvBefore,
+    iKibo,
+    iMove,
+    facilitate_more_mobility
+) :-
+    purposeClaim(iKibo, iMove, xPurpose),
+    whyRelatedOrSame(xPurpose, increase_mobility).
+
+moveSupportsHowToWin(
+    iEnvBefore,
+    iKibo,
+    iMove,
+    prefer_multiple_beneficial_purposes
+) :-
+    moveQuality(iKibo, iMove, better, dual_defensive_offensive).
+
+moveSupportsHowToWin(
+    iEnvBefore,
+    iKibo,
+    iMove,
+    use_offensive_purpose
+) :-
+    moveServesPurposeDomain(iKibo, iMove, offensive).
+
+moveSupportsHowToWin(
+    iEnvBefore,
+    iKibo,
+    iMove,
+    use_defensive_purpose
+) :-
+    moveServesPurposeDomain(iKibo, iMove, defensive).
+
+winningMoveCandidate(iEnvBefore, iKibo, iMove) :-
+    moveSupportsHowToWin(iEnvBefore, iKibo, iMove, xStrategy),
+    how_to_win(xStrategy).
+
+whyNode(capture_higher_valued_pieces, winning_method).
+whyNode(facilitate_more_mobility, winning_method).
+whyNode(prefer_multiple_beneficial_purposes, winning_method).
+whyNode(use_offensive_purpose, winning_method).
+whyNode(use_defensive_purpose, winning_method).
+
+whyEdge(capture_higher_valued_pieces, gain_material_advantage, how_to_win).
+whyEdge(facilitate_more_mobility, improve_position, how_to_win).
+whyEdge(prefer_multiple_beneficial_purposes, better_move, how_to_win).
+whyEdge(use_offensive_purpose, defeat_opponent_king, how_to_win).
+whyEdge(use_defensive_purpose, preserve_own_force, how_to_win).
+
+universalGameStrategy(capture_target_by_direct_or_indirect_plan).
+metaWhyRule(capture_a_directly_or_capture_b_to_enable_a).
+
+capture(iEnv, iKind, iTargetA, plan(direct, oMove)) :-
+    directCapture(iEnv, iKind, iTargetA, oMove).
+
+capture(
+    iEnv,
+    iKind,
+    iTargetA,
+    plan(indirect, oTargetB, oFirstMove)
+) :-
+    indirectCapture(
+        iEnv,
+        iKind,
+        iTargetA,
+        oTargetB,
+        oFirstMove
+    ).
+
+directCapture(iEnv, iKind, iTargetA, oMove) :-
+    legalCaptureMove(iEnv, iKind, oMove, iTargetA).
+
+intermediateCaptureTarget(iEnv, iKind, iTargetA, oTargetB) :-
+    targetAtHand(iEnv, iKind, oTargetB),
+    captureOfTargetEnablesTarget(iEnv, iKind, oTargetB, iTargetA).
+
+intermediateCaptureTarget(iEnv, iKind, iTargetA, oTargetB) :-
+    easierToCapture(iEnv, iKind, oTargetB, iTargetA),
+    captureOfTargetEnablesTarget(iEnv, iKind, oTargetB, iTargetA).
+
+indirectCapture(
+    iEnv,
+    iKind,
+    iTargetA,
+    oTargetB,
+    oFirstMove
+) :-
+    intermediateCaptureTarget(iEnv, iKind, iTargetA, oTargetB),
+    legalCaptureMove(iEnv, iKind, oFirstMove, oTargetB),
+    applyLogicalMove(iEnv, oFirstMove, xEnvAfterB),
+    captureEnabledByRemoving(
+        xEnvAfterB,
+        iKind,
+        oTargetB,
+        iTargetA
+    ),
+    directCapture(xEnvAfterB, iKind, iTargetA, xSecondMove).
+
+how_to_win(use_indirect_capture_plan).
+how_to_win_supports(use_indirect_capture_plan, gain_material_advantage).
+
+whyNode(capture_target, tactical_goal).
+whyNode(direct_capture, capture_method).
+whyNode(indirect_capture, capture_method).
+whyNode(capture_intermediate_target, enabling_action).
+whyEdge(direct_capture, capture_target, achieves).
+whyEdge(indirect_capture, capture_target, achieves_later).
+whyEdge(capture_intermediate_target, indirect_capture, enables).
+whyEdge(use_indirect_capture_plan, gain_material_advantage, how_to_win).
+
+whyGap(gain_more_capturing_opportunity, compare_environment_before_after).
+whyGap(indirect_capture, logical_board_simulation_required).
+whyGap(increase_mobility, prospective_capture_from_new_destination_not_yet_evaluated).
+
+whyAncestor(iLowerPurpose, oHigherPurpose) :-
+    whyEdge(iLowerPurpose, oHigherPurpose, xRelation).
+
+whyAncestor(iLowerPurpose, oHigherPurpose) :-
+    whyEdge(iLowerPurpose, xMiddlePurpose, xRelation),
+    whyAncestor(xMiddlePurpose, oHigherPurpose).
+
+opponent(BLUE, RED).
+opponent(RED, BLUE).
+
+pieceValue(king, 1000).
+pieceValue(chariot, 90).
+pieceValue(cannon, 50).
+pieceValue(horse, 40).
+pieceValue(elephant, 30).
+pieceValue(guard, 20).
+pieceValue(soldier, 10).
+
+isThere(RED, king, 1, 4).
+isThere(RED, chariot, 0, 0).
+isThere(RED, chariot, 0, 8).
+isThere(RED, cannon, 2, 1).
+isThere(RED, cannon, 2, 7).
+isThere(RED, horse, 0, 2).
+isThere(RED, horse, 0, 7).
+isThere(RED, elephant, 0, 1).
+isThere(RED, elephant, 0, 6).
+isThere(RED, guard, 0, 3).
+isThere(RED, guard, 0, 5).
+isThere(RED, soldier, 3, 0).
+isThere(RED, soldier, 3, 2).
+isThere(RED, soldier, 3, 4).
+isThere(RED, soldier, 3, 6).
+isThere(RED, soldier, 3, 8).
+
+isThere(BLUE, king, 8, 4).
+isThere(BLUE, chariot, 9, 0).
+isThere(BLUE, chariot, 9, 8).
+isThere(BLUE, cannon, 7, 1).
+isThere(BLUE, cannon, 7, 7).
+isThere(BLUE, horse, 9, 2).
+isThere(BLUE, horse, 9, 7).
+isThere(BLUE, elephant, 9, 1).
+isThere(BLUE, elephant, 9, 6).
+isThere(BLUE, guard, 9, 3).
+isThere(BLUE, guard, 9, 5).
+isThere(BLUE, soldier, 6, 0).
+isThere(BLUE, soldier, 6, 2).
+isThere(BLUE, soldier, 6, 4).
+isThere(BLUE, soldier, 6, 6).
+isThere(BLUE, soldier, 6, 8).
+equal(iX, iX).
+
+lessThan(iX, iY) :-
+    greaterOrEqual(iY, iX),
+    not(equal(iX, iY)).
+
+isBetween(iMiddle, iVal1, iVal2) :-
+    lessThan(iVal1, iMiddle),
+    lessThan(iMiddle, iVal2).
+
+isBetween(iMiddle, iVal1, iVal2) :-
+    lessThan(iVal2, iMiddle),
+    lessThan(iMiddle, iVal1).
+
+isKingPiece(king).
+
+getKingPos(iKind, iPiece, Pos1, Pos2, Pos2) :-
+    isKingPiece(iPiece),
+    !.
+getKingPos(iKind, iPiece, Pos1, Pos2, pos(xKingCol, xKingRow)) :-
+    isThere(iKind, king, xKingRow, xKingCol).
+
+isPiecePresentAfterMove(iPiece, Pos1, Pos2, xRow, xCol, iPiece) :-
+    equal(Pos2, pos(xCol, xRow)).
+isPiecePresentAfterMove(iPiece, Pos1, Pos2, xRow, xCol, xPieceType) :-
+    isThere(xSide, xPieceType, xRow, xCol),
+    not(equal(Pos1, pos(xCol, xRow))),
+    not(equal(Pos2, pos(xCol, xRow))).
+
+hasPieceBetweenColRowAfterMove(iPiece, Pos1, Pos2, iCol, iRow1, iRow2) :-
+    isPiecePresentAfterMove(iPiece, Pos1, Pos2, xRow, iCol, xPieceType),
+    isBetween(xRow, iRow1, iRow2).
+
+hasPieceBetweenRowColAfterMove(iPiece, Pos1, Pos2, iRow, iCol1, iCol2) :-
+    isPiecePresentAfterMove(iPiece, Pos1, Pos2, iRow, xCol, xPieceType),
+    isBetween(xCol, iCol1, iCol2).
+
+exactlyOneNonCannonPieceBetweenColRowAfterMove(iPiece, Pos1, Pos2, iCol, iRow1, iRow2) :-
+    isPiecePresentAfterMove(iPiece, Pos1, Pos2, xRow1Piece, iCol, xScreenPieceType),
+    not(equal(xScreenPieceType, cannon)),
+    isBetween(xRow1Piece, iRow1, iRow2),
+    not(hasOtherPieceBetweenColRowAfterMove(iPiece, Pos1, Pos2, iCol, iRow1, iRow2, xRow1Piece)).
+
+hasOtherPieceBetweenColRowAfterMove(iPiece, Pos1, Pos2, iCol, iRow1, iRow2, iFirstRow) :-
+    isPiecePresentAfterMove(iPiece, Pos1, Pos2, xRow2Piece, iCol, xPieceType),
+    isBetween(xRow2Piece, iRow1, iRow2),
+    not(equal(xRow2Piece, iFirstRow)).
+
+exactlyOneNonCannonPieceBetweenRowColAfterMove(iPiece, Pos1, Pos2, iRow, iCol1, iCol2) :-
+    isPiecePresentAfterMove(iPiece, Pos1, Pos2, iRow, xCol1Piece, xScreenPieceType),
+    not(equal(xScreenPieceType, cannon)),
+    isBetween(xCol1Piece, iCol1, iCol2),
+    not(hasOtherPieceBetweenRowColAfterMove(iPiece, Pos1, Pos2, iRow, iCol1, iCol2, xCol1Piece)).
+
+hasOtherPieceBetweenRowColAfterMove(iPiece, Pos1, Pos2, iRow, iCol1, iCol2, iFirstCol) :-
+    isPiecePresentAfterMove(iPiece, Pos1, Pos2, iRow, xCol2Piece, xPieceType),
+    isBetween(xCol2Piece, iCol1, iCol2),
+    not(equal(xCol2Piece, iFirstCol)).
+
+opponentChariotChecksAfterMove(iKind, iPiece, Pos1, Pos2, KingPos) :-
+    opponent(iKind, oOppoKind),
+    isThere(oOppoKind, chariot, xOppoRow, xOppoCol),
+    not(equal(Pos2, pos(xOppoCol, xOppoRow))),
+    equal(KingPos, pos(xOppoCol, xKingRow)),
+    not(hasPieceBetweenColRowAfterMove(iPiece, Pos1, Pos2, xOppoCol, xOppoRow, xKingRow)).
+
+opponentChariotChecksAfterMove(iKind, iPiece, Pos1, Pos2, KingPos) :-
+    opponent(iKind, oOppoKind),
+    isThere(oOppoKind, chariot, xOppoRow, xOppoCol),
+    not(equal(Pos2, pos(xOppoCol, xOppoRow))),
+    equal(KingPos, pos(xKingCol, xOppoRow)),
+    not(hasPieceBetweenRowColAfterMove(iPiece, Pos1, Pos2, xOppoRow, xOppoCol, xKingCol)).
+
+opponentCannonChecksAfterMove(iKind, iPiece, Pos1, Pos2, KingPos) :-
+    opponent(iKind, oOppoKind),
+    isThere(oOppoKind, cannon, xOppoRow, xOppoCol),
+    not(equal(Pos2, pos(xOppoCol, xOppoRow))),
+    equal(KingPos, pos(xOppoCol, xKingRow)),
+    exactlyOneNonCannonPieceBetweenColRowAfterMove(iPiece, Pos1, Pos2, xOppoCol, xOppoRow, xKingRow).
+
+opponentCannonChecksAfterMove(iKind, iPiece, Pos1, Pos2, KingPos) :-
+    opponent(iKind, oOppoKind),
+    isThere(oOppoKind, cannon, xOppoRow, xOppoCol),
+    not(equal(Pos2, pos(xOppoCol, xOppoRow))),
+    equal(KingPos, pos(xKingCol, xOppoRow)),
+    exactlyOneNonCannonPieceBetweenRowColAfterMove(iPiece, Pos1, Pos2, xOppoRow, xOppoCol, xKingCol).
+
+exposesKing(iKind, iPiece, Pos1, Pos2) :-
+    getKingPos(iKind, iPiece, Pos1, Pos2, xKingPos),
+    opponentChariotChecksAfterMove(iKind, iPiece, Pos1, Pos2, xKingPos),
+    !.
+
+exposesKing(iKind, iPiece, Pos1, Pos2) :-
+    getKingPos(iKind, iPiece, Pos1, Pos2, xKingPos),
+    opponentCannonChecksAfterMove(iKind, iPiece, Pos1, Pos2, xKingPos),
+    !.
+
+?- main(emptyKibo, oNewPos, oResult).
